@@ -16,6 +16,7 @@ func (f fieldError) Error() string {
 type Row struct {
 	fieldIdx map[string]int
 	fields   []string
+	copied   bool
 }
 
 func (r *Row) Field(name string) string {
@@ -26,12 +27,36 @@ func (r *Row) Field(name string) string {
 	return r.fields[idx]
 }
 
+func (r *Row) SetField(name, value string) {
+	if !r.copied {
+		// Make a copy to avoid overwriting reused slices.
+		r.fields = append([]string(nil), r.fields...)
+		r.copied = true
+	}
+	idx, ok := r.fieldIdx[name]
+	if !ok {
+		panic(fieldError(name))
+	}
+	r.fields[idx] = value
+}
+
 type Config struct {
-	KeepCol func(name string) bool
-	KeepRow func(r Row) bool
+	KeepCol   func(name string) bool
+	KeepRow   func(r Row) bool
+	ModifyRow func(r Row)
 }
 
 func Process(r *csv.Reader, w *csv.Writer, cfg *Config) (err error) {
+	if cfg.KeepCol == nil {
+		cfg.KeepCol = func(string) bool { return true }
+	}
+	if cfg.KeepRow == nil {
+		cfg.KeepRow = func(Row) bool { return true }
+	}
+	if cfg.ModifyRow == nil {
+		cfg.ModifyRow = func(Row) {}
+	}
+
 	defer func() {
 		r := recover()
 		switch r := r.(type) {
@@ -68,6 +93,8 @@ func Process(r *csv.Reader, w *csv.Writer, cfg *Config) (err error) {
 			if !cfg.KeepRow(r) {
 				continue
 			}
+			cfg.ModifyRow(r)
+			e = r.fields
 		}
 		err = w.Write(trim(e, keepIdx))
 		if err != nil {
