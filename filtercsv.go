@@ -42,8 +42,8 @@ func (r *Row) SetField(name, value string) {
 
 type Config struct {
 	KeepCol   func(name string) bool
-	KeepRow   func(r Row) bool
-	ModifyRow func(r Row)
+	KeepRow   func(r *Row) bool
+	ModifyRow func(r *Row)
 }
 
 func Process(r *csv.Reader, w *csv.Writer, cfg *Config) (err error) {
@@ -51,10 +51,10 @@ func Process(r *csv.Reader, w *csv.Writer, cfg *Config) (err error) {
 		cfg.KeepCol = func(string) bool { return true }
 	}
 	if cfg.KeepRow == nil {
-		cfg.KeepRow = func(Row) bool { return true }
+		cfg.KeepRow = func(*Row) bool { return true }
 	}
 	if cfg.ModifyRow == nil {
-		cfg.ModifyRow = func(Row) {}
+		cfg.ModifyRow = func(*Row) {}
 	}
 
 	defer func() {
@@ -89,7 +89,7 @@ func Process(r *csv.Reader, w *csv.Writer, cfg *Config) (err error) {
 				return fmt.Errorf("duplicate column names")
 			}
 		} else {
-			r := Row{fieldIdx: fieldIdx, fields: e}
+			r := &Row{fieldIdx: fieldIdx, fields: e}
 			if !cfg.KeepRow(r) {
 				continue
 			}
