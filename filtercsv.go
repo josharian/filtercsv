@@ -3,7 +3,6 @@ package filtercsv
 import (
 	"encoding/csv"
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -68,36 +67,31 @@ func Process(r *csv.Reader, w *csv.Writer, cfg *Config) (err error) {
 		}
 	}()
 
-	fieldIdx := make(map[string]int)
+	rr := NewReader(r)
 	var keepIdx []bool
-	for lineno := 0; ; lineno++ {
-		e, err := r.Read()
+	for first := true; ; first = false {
+		row, err := rr.Read()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return err
 		}
-		if lineno == 0 {
-			// header line
-			keepIdx = make([]bool, len(e))
-			for idx, name := range e {
-				fieldIdx[name] = idx
+		if first {
+			// one-time init
+			keepIdx = make([]bool, len(row.fields))
+			for idx, name := range rr.Header {
 				keepIdx[idx] = cfg.KeepCol(name)
 			}
-			if len(fieldIdx) != len(e) {
-				return fmt.Errorf("duplicate column names")
+			if err := w.Write(trim(rr.Header, keepIdx)); err != nil {
+				return err
 			}
-		} else {
-			r := &Row{fieldIdx: fieldIdx, fields: e}
-			if !cfg.KeepRow(r) {
-				continue
-			}
-			cfg.ModifyRow(r)
-			e = r.fields
 		}
-		err = w.Write(trim(e, keepIdx))
-		if err != nil {
+		if !cfg.KeepRow(row) {
+			continue
+		}
+		cfg.ModifyRow(row)
+		if err := w.Write(trim(row.fields, keepIdx)); err != nil {
 			return err
 		}
 	}
